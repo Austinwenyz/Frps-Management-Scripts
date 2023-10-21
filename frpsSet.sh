@@ -16,7 +16,7 @@ function find_frps {
 }
 
 function find_frps_config {
-    find "$SCRIPT_DIR" -type f -name "frps.ini" 2>/dev/null
+    find "$SCRIPT_DIR" -type f -name "frps.yaml" 2>/dev/null
 }
 
 function save_to_file {
@@ -154,13 +154,13 @@ function set_paths {
         local configs=($(find_frps_config))
         case ${#configs[@]} in
             0)
-                read -p "未找到frps.ini，请提供frps.ini的完整路径/Couldn't find frps.ini, please provide the full path to frps.ini: " FRPS_CONFIG
+                read -p "未找到frps.yaml，请提供frps.yaml的完整路径/Couldn't find frps.yaml, please provide the full path to frps.yaml: " FRPS_CONFIG
                 ;;
             1)
                 FRPS_CONFIG=${configs[0]}
                 ;;
             *)
-                echo "找到多个frps.ini文件，请选择一个/Found multiple frps.ini files, please choose one:"
+                echo "找到多个frps.yaml文件，请选择一个/Found multiple frps.yaml files, please choose one:"
                 select choice in "${configs[@]}"; do
                     FRPS_CONFIG=$choice
                     break
