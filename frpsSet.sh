@@ -16,7 +16,7 @@ function find_frps {
 }
 
 function find_frps_config {
-    find "$SCRIPT_DIR" -type f \( -name "frps.yaml" -o -name "frps.json" -o -name "frps.toml" \) 2>/dev/null
+    find "$SCRIPT_DIR" -type f -name "frps.yaml" 2>/dev/null
 }
 
 function save_to_file {
