@@ -1,65 +1,57 @@
 #!/bin/bash
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-FRPS_PATH_FILE="$SCRIPT_DIR/.frps_path"
-FRPS_CONFIG_PATH_FILE="$SCRIPT_DIR/.frps_config_path"
-LAST_CHOICE_FILE="$SCRIPT_DIR/.last_frps_config_choice"
+# Define constants
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+SAVE_FILE="$SCRIPT_DIR/.frpsSetSave"
 LOG_DIR="$SCRIPT_DIR/log"
-mkdir -p $LOG_DIR
-TODAY=$(date +%Y-%m-%d)
-LOG_FILE="$LOG_DIR/$TODAY.log"
+LOG_FILE="$LOG_DIR/$(date +%Y-%m-%d).log"
 
-# Functions to find and set frps binary and configuration paths
+# --------------------- Utility Functions ---------------------
+function log {
+    echo "-------- $(date) -------- $1 --------" >> $LOG_FILE
+}
 
 function find_frps {
-    which frps || find "$SCRIPT_DIR" -type f -name "frps" | head -n 1
+    which frps 2>/dev/null || find "$SCRIPT_DIR" -type f -name "frps" 2>/dev/null
 }
 
 function find_frps_config {
-    find "$SCRIPT_DIR" -type f -name "frps.ini"
+    find "$SCRIPT_DIR" -type f -name "frps.ini" 2>/dev/null
 }
 
-function set_paths {
-    FRPS_BIN=$(<"$FRPS_PATH_FILE" 2>/dev/null)
-    FRPS_CONFIG=$(<"$FRPS_CONFIG_PATH_FILE" 2>/dev/null)
+function save_to_file {
+    echo "FRPS_BIN=$1" > $SAVE_FILE
+    echo "FRPS_CONFIG=$2" >> $SAVE_FILE
+}
 
-    if [[ ! -x $FRPS_BIN ]]; then
-        FRPS_BIN=$(find_frps)
-        echo $FRPS_BIN > "$FRPS_PATH_FILE"
-    fi
-
-    if [[ ! -f $FRPS_CONFIG ]]; then
-        local configs=($(find_frps_config))
-        local count=${#configs[@]}
-
-        case $count in
-            0)
-                read -p "未找到frps.ini，请提供frps.ini的完整路径/Couldn't find frps.ini, please provide the full path to frps.ini: " FRPS_CONFIG
-                ;;
-            1)
-                FRPS_CONFIG=${configs[0]}
-                ;;
-            *)
-                echo "找到多个frps.ini文件，请选择一个/Found multiple frps.ini files, please choose one:"
-                for i in "${!configs[@]}"; do
-                    echo "$((i+1)) - ${configs[$i]}"
-                done
-                read -p "请选择一个操作/Please select an operation: " choice
-                FRPS_CONFIG=${configs[$((choice-1))]}
-                ;;
-        esac
-        echo $FRPS_CONFIG > "$FRPS_CONFIG_PATH_FILE"
+function load_from_file {
+    if [[ -f $SAVE_FILE ]]; then
+        source $SAVE_FILE
     fi
 }
 
-# Core functions for frps actions, log display, and configuration reset
-
+# --------------------- Core Functions ---------------------
 function frps_action {
     case $1 in
-        start)   nohup $FRPS_BIN -c $FRPS_CONFIG >> $LOG_FILE 2>&1 & ;;
-        stop)    killall frps ;;
-        restart) frps_action stop; frps_action start ;;
-        check)   pgrep -x frps &>/dev/null && echo "frps正在运行/frps is running." || echo "frps未运行/frps is not running." ;;
+        start)
+            log "FRPS STARTED"
+            nohup $FRPS_BIN -c $FRPS_CONFIG >> $LOG_FILE 2>&1 &
+            sleep 2
+            frps_action check
+            ;;
+        stop)
+            log "FRPS STOPPED"
+            pkill -x frps
+            sleep 2
+            frps_action check
+            ;;
+        restart)
+            frps_action stop
+            frps_action start
+            ;;
+        check)
+            pgrep -x frps &>/dev/null && echo "frps正在运行/frps is running." || echo "frps未运行/frps is not running."
+            ;;
     esac
 }
 
@@ -68,7 +60,8 @@ function set_config {
 }
 
 function reset_paths {
-    rm -f "$FRPS_CONFIG_PATH_FILE" "$FRPS_PATH_FILE"
+    rm -f "$SAVE_FILE"
+    unset FRPS_BIN FRPS_CONFIG
     set_paths
     echo "frps路径和配置路径都已重置/frps and configuration paths have been reset."
 }
@@ -90,16 +83,13 @@ Available commands:
     log        实时显示frps日志 | Display frps log in real-time
     resetPath  重置frps和配置路径 | Reset frps and configuration paths
     man        显示此功能手册 | Display this manual
-
-Examples:
-    $(basename $0) start     启动frps | Start frps
-    $(basename $0) setConfig 设置frps配置 | Set frps configuration
     "
 }
 
-# User interface functions for menu and command-line actions
-
 function display_menu {
+    echo "当前使用的frps路径/Current frps path: $FRPS_BIN"
+    echo "当前使用的frps配置文件路径/Current frps config file path: $FRPS_CONFIG"
+    echo "----------------------------------------------"
     echo "1 - 启动frps Start frps"
     echo "2 - 停止frps Stop frps"
     echo "3 - 重启frps Restart frps"
@@ -108,6 +98,7 @@ function display_menu {
     echo "6 - 实时显示frps日志 Display frps log in real-time"
     echo "7 - 重置frps和配置路径 Reset frps and configuration paths"
     echo "0 - 退出 Exit"
+    
     read -p "请选择一个操作: Please select an operation: " choice
 
     case $choice in
@@ -137,8 +128,50 @@ function command_line_action {
     esac
 }
 
+function set_paths {
+    load_from_file
+
+    if [[ -z $FRPS_BIN || ! -x $FRPS_BIN ]]; then
+        local frps_binaries=($(find_frps))
+        case ${#frps_binaries[@]} in
+            0)
+                read -p "未找到frps，请提供frps的完整路径/Couldn't find frps, please provide the full path to frps: " FRPS_BIN
+                ;;
+            1)
+                FRPS_BIN=${frps_binaries[0]}
+                ;;
+            *)
+                echo "找到多个frps，请选择一个/Found multiple frps, please choose one:"
+                select choice in "${frps_binaries[@]}"; do
+                    FRPS_BIN=$choice
+                    break
+                done
+                ;;
+        esac
+    fi
+
+    if [[ -z $FRPS_CONFIG || ! -f $FRPS_CONFIG ]]; then
+        local configs=($(find_frps_config))
+        case ${#configs[@]} in
+            0)
+                read -p "未找到frps.ini，请提供frps.ini的完整路径/Couldn't find frps.ini, please provide the full path to frps.ini: " FRPS_CONFIG
+                ;;
+            1)
+                FRPS_CONFIG=${configs[0]}
+                ;;
+            *)
+                echo "找到多个frps.ini文件，请选择一个/Found multiple frps.ini files, please choose one:"
+                select choice in "${configs[@]}"; do
+                    FRPS_CONFIG=$choice
+                    break
+                done
+                ;;
+        esac
+    fi
+
+    save_to_file $FRPS_BIN $FRPS_CONFIG
+}
+
 # Execution starts here
-
 set_paths
-
 [[ -z $1 ]] && display_menu || command_line_action $1
