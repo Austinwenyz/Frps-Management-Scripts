@@ -75,6 +75,7 @@ function display_log {
         source $SAVE_FILE
         tail -f $LOG_FILE
     else
+        echo "未找到日志文件路径。请使用有效命令运行脚本以生成日志文件路径。"
         echo "Log file path not found. Please run the script with a valid command to generate the log file path."
     fi
 }
