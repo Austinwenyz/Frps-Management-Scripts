@@ -22,6 +22,7 @@ function find_frps_config {
 function save_to_file {
     echo "FRPS_BIN=$1" > $SAVE_FILE
     echo "FRPS_CONFIG=$2" >> $SAVE_FILE
+    echo "LOG_FILE=$LOG_FILE" >> $SAVE_FILE
 }
 
 function load_from_file {
@@ -34,18 +35,21 @@ function load_from_file {
 function frps_action {
     case $1 in
         start)
+            set_paths
             log "FRPS STARTED"
             nohup $FRPS_BIN -c $FRPS_CONFIG >> $LOG_FILE 2>&1 &
             sleep 2
             frps_action check
             ;;
         stop)
+            set_paths
             log "FRPS STOPPED"
             pkill -x frps
             sleep 2
             frps_action check
             ;;
         restart)
+            set_paths
             frps_action stop
             frps_action start
             ;;
@@ -67,7 +71,12 @@ function reset_paths {
 }
 
 function display_log {
-    tail -f $LOG_FILE
+    if [[ -f $SAVE_FILE ]]; then
+        source $SAVE_FILE
+        tail -f $LOG_FILE
+    else
+        echo "Log file path not found. Please run the script with a valid command to generate the log file path."
+    fi
 }
 
 function display_manual {
